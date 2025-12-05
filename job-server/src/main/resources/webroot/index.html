@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Async Job UI</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        input, textarea, select { width: 300px; padding: 6px; margin-bottom: 10px; }
+        button { padding: 8px 14px; margin-top: 10px; }
+        #jobList div { cursor: pointer; padding: 8px; border-bottom: 1px solid #ccc; }
+        #jobList div:hover { background: #f0f0f0; }
+        .panel { border: 1px solid #ddd; padding: 15px; margin-bottom: 25px; }
+        .user-selector { background: #f5f5f5; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .job-item { display: flex; justify-content: space-between; align-items: center; }
+        .job-status { font-size: 12px; padding: 2px 8px; border-radius: 3px; }
+        .job-status.PENDING { background: #ffc107; color: #000; }
+        .job-status.PROCESSING { background: #17a2b8; color: #fff; }
+        .job-status.COMPLETED { background: #28a745; color: #fff; }
+        .job-status.FAILED { background: #dc3545; color: #fff; }
+    </style>
+</head>
+
+<body>
+
+<div class="user-selector">
+    <h3 style="margin-top: 0;">Select User</h3>
+    <select id="selectedUser" onchange="onUserChange()">
+        <option value="1">parminder (ghuman1986@gmail.com)</option>
+        <option value="2">test (test@example.com)</option>
+    </select>
+    <button onclick="loadUserJobs()">Refresh Jobs</button>
+</div>
+
+<h2>Submit Job</h2>
+
+<div class="panel">
+    <label>User:</label><br>
+    <select id="userId" disabled>
+        <option value="1">parminder (ghuman1986@gmail.com)</option>
+        <option value="2">test (test@example.com)</option>
+    </select>
+    <small>(Auto-set from selected user above)</small><br><br>
+
+    <label>Project (optional):</label><br>
+    <select id="projectId">
+        <option value="">-- None --</option>
+        <option value="1">Project 1</option>
+        <option value="2">Project 2</option>
+    </select><br>
+
+    <label>JSON Parameters:</label><br>
+    <textarea id="params" rows="4">{ "task":"demo" }</textarea><br>
+
+    <button onclick="submitJob()">Submit Job</button>
+
+    <p id="submitResult"></p>
+</div>
+
+<h2>Jobs for Selected User</h2>
+
+<div class="panel" id="jobList">
+    <i>Loading...</i>
+</div>
+
+<h2>Job Details</h2>
+
+<div class="panel" id="jobDetails">
+    <i>Select a job to view details</i>
+</div>
+
+<script>
+    // On page load
+    window.onload = function() {
+        onUserChange();
+        loadUserJobs();
+    };
+
+    function onUserChange() {
+        const userId = document.getElementById("selectedUser").value;
+        document.getElementById("userId").value = userId;
+        loadUserJobs();
+    }
+
+    async function loadUserJobs() {
+        const userId = document.getElementById("selectedUser").value;
+        const listDiv = document.getElementById("jobList");
+        listDiv.innerHTML = "<i>Loading...</i>";
+
+        try {
+            const resp = await fetch("/jobs/user/" + userId);
+            const jobs = await resp.json();
+            renderJobList(jobs);
+        } catch (err) {
+            listDiv.innerHTML = "<i>Error loading jobs</i>";
+            console.error(err);
+        }
+    }
+
+    async function submitJob() {
+        const userId = Number(document.getElementById("selectedUser").value);
+        let projectId = null;
+        try {
+            if (document.getElementById("projectId").value) {
+                projectId = Number(document.getElementById("projectId").value);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+        let parameters;
+
+        // Parse JSON safely
+        try {
+            parameters = JSON.parse(document.getElementById("params").value);
+        } catch (e) {
+            alert("Invalid JSON!");
+            return;
+        }
+
+        const body = { userId, projectId, parameters };
+
+        const resp = await fetch("/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+
+        const data = await resp.json();
+        document.getElementById("submitResult").innerText =
+            "Job submitted. ID: " + data.jobId + " (status: " + data.status + ")";
+
+        // Reload user jobs list
+        loadUserJobs();
+    }
+
+    function renderJobList(jobs) {
+        const listDiv = document.getElementById("jobList");
+        listDiv.innerHTML = "";
+
+        jobs.forEach(job => {
+            const div = document.createElement("div");
+            div.className = "job-item";
+            div.innerHTML = `
+                <span>${job.jobId}</span>
+                <span class="job-status ${job.status}">${job.status}</span>
+            `;
+            div.onclick = () => loadJob(job.jobId);
+            listDiv.appendChild(div);
+        });
+
+        if (jobs.length === 0) {
+            listDiv.innerHTML = "<i>No jobs for this user</i>";
+        }
+    }
+
+    async function loadJob(id) {
+        const resp = await fetch("/jobs/" + id);
+        if (!resp.ok) {
+            document.getElementById("jobDetails").innerHTML = "<b>Job not found</b>";
+            return;
+        }
+
+        const job = await resp.json();
+
+        document.getElementById("jobDetails").innerHTML = `
+            <b>Job ID:</b> ${job.jobId}<br>
+            <b>Status:</b> ${job.status}<br>
+            <b>User:</b> ${job.userId}<br>
+            <b>Project:</b> ${job.projectId}<br>
+            <b>Parameters:</b>
+            <pre>${JSON.stringify(job.parameters, null, 2)}</pre>
+            <b>Result:</b>
+            <pre>${JSON.stringify(job.result, null, 2)}</pre>
+            <b>Error:</b> ${job.error || "none"}
+        `;
+    }
+</script>
+
+</body>
+</html>

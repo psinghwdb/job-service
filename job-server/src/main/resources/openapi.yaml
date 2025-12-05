@@ -1,0 +1,250 @@
+openapi: 3.0.3
+info:
+  title: Async Job Server API
+  description: |
+    RESTful API for managing asynchronous jobs.
+    Jobs are processed in the background by worker verticles.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8067
+    description: Local development server
+
+tags:
+  - name: Jobs
+    description: Job management operations
+
+paths:
+  /jobs:
+    post:
+      operationId: submitJob
+      tags:
+        - Jobs
+      summary: Submit a new job
+      description: |
+        Creates a new job and dispatches it to a worker for processing.
+        Returns immediately with job ID and PENDING status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobSubmitRequest'
+            examples:
+              basic:
+                summary: Basic job submission
+                value:
+                  userId: 1
+                  projectId: null
+                  parameters:
+                    task: "demo"
+              withProject:
+                summary: Job with project
+                value:
+                  userId: 1
+                  projectId: 1
+                  parameters:
+                    task: "process-data"
+                    config:
+                      timeout: 30
+      responses:
+        '202':
+          description: Job accepted and queued for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobSubmitResponse'
+        '400':
+          description: Bad request - invalid user or project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /jobs/{jobId}:
+    get:
+      operationId: getJob
+      tags:
+        - Jobs
+      summary: Get job details
+      description: Retrieves the current status and details of a job by its ID
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: The unique identifier of the job
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Job found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetailResponse'
+        '404':
+          description: Job not found
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /jobs/user/{userId}:
+    get:
+      operationId: getJobsByUser
+      tags:
+        - Jobs
+      summary: Get jobs by user
+      description: Retrieves all jobs submitted by a specific user, ordered by creation date (newest first)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: The user ID to filter jobs by
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: List of jobs for the user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobSummary'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    JobSubmitRequest:
+      type: object
+      required:
+        - userId
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: ID of the user submitting the job
+          example: 1
+        projectId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Optional project ID to associate with the job
+          example: 1
+        parameters:
+          type: object
+          description: Job-specific parameters passed to the processor
+          additionalProperties: true
+          example:
+            task: "demo"
+
+    JobSubmitResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Unique identifier for the created job
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        status:
+          $ref: '#/components/schemas/JobStatus'
+
+    JobDetailResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Unique identifier for the job
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        userId:
+          type: integer
+          format: int64
+          description: ID of the user who submitted the job
+        projectId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Associated project ID, if any
+        parameters:
+          type: object
+          description: Job parameters
+          additionalProperties: true
+        result:
+          type: object
+          nullable: true
+          description: Job result (only present when status is COMPLETED)
+          additionalProperties: true
+        error:
+          type: string
+          nullable: true
+          description: Error message (only present when status is FAILED)
+
+    JobSummary:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Unique identifier for the job
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        userId:
+          type: integer
+          format: int64
+          description: ID of the user who submitted the job
+        projectId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Associated project ID
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the job was created
+
+    JobStatus:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSING
+        - COMPLETED
+        - FAILED
+      description: |
+        Current status of the job:
+        * `PENDING` - Job is queued and waiting to be processed
+        * `PROCESSING` - Job is currently being processed by a worker
+        * `COMPLETED` - Job finished successfully
+        * `FAILED` - Job failed with an error
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+          example: "User not found: 999"
+

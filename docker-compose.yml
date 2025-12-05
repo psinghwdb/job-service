@@ -8,9 +8,14 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: jobs
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   mock-external:
     build: ./mock_service
@@ -19,14 +24,23 @@ services:
       - "8081:8081"
 
   # Candidate service
-  # job-server:
-  #   build: ./job-server
-  #   depends_on:
-  #     - db
-  #     - mock-external
-  #   ports:
-  #     - "8080:8080"
+  job-server:
+    build: ./job-server
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-external:
+        condition: service_started
+    ports:
+      - "8067:8067"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: jobs
+      HTTP_PORT: 8067
+      EXTERNAL_API_URL: http://mock-external:8081/
 
 volumes:
   db_data:
-

@@ -1,0 +1,3 @@
+com/example/jobserver/repositories/impl/JobRepositoryImplTest.class
+com/example/jobserver/service/impl/JobServiceImplTest.class
+com/example/jobserver/clients/impl/ThirdPartyPythonClientTest.class
